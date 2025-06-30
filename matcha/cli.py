@@ -234,6 +234,9 @@ def cli():
     parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
     parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
     parser.add_argument("--spk", type=int, default=None, help="Speaker ID")
+    # new flags
+    parser.add_argument("--embedding_path", type=str, default=None, help="Path to tensor with ECAPA speaker embedding")
+    parser.add_argument("--use_external_speaker", action="store_true", help="Use external speaker or not")
     parser.add_argument(
         "--temperature",
         type=float,
@@ -282,7 +285,10 @@ def cli():
 
     texts = get_texts(args)
 
-    spk = torch.tensor([args.spk], device=device, dtype=torch.long) if args.spk is not None else None
+    if args.embedding_path:
+        spk = torch.load(args.embedding_path).to(device)
+    else:
+        spk = torch.tensor([args.spk], device=device, dtype=torch.long) if args.spk is not None else None
     if len(texts) == 1 or not args.batched:
         unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk)
     else:
@@ -332,8 +338,9 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             batch["x_lengths"].to(device),
             n_timesteps=args.steps,
             temperature=args.temperature,
-            spks=spk.expand(b) if spk is not None else spk,
+            spks=spk.expand(b, -1) if spk is not None else spk,
             length_scale=args.speaking_rate,
+            use_external_speaker_embedding=args.use_external_speaker,
         )
 
         output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
@@ -344,7 +351,7 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
         total_rtf.append(output["rtf"])
         total_rtf_w.append(rtf_w)
         for j in range(output["mel"].shape[0]):
-            base_name = f"utterance_{j:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{j:03d}"
+            base_name = f"utterance_{j:03d}"
             length = output["mel_lengths"][j]
             new_dict = {"mel": output["mel"][j][:, :length], "waveform": output["waveform"][j][: length * 256]}
             location = save_to_folder(base_name, new_dict, args.output_folder)
@@ -361,7 +368,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     total_rtf_w = []
     for i, text in enumerate(texts):
         i = i + 1
-        base_name = f"utterance_{i:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{i:03d}"
+        base_name = f"utterance_{i:03d}"
 
         print("".join(["="] * 100))
         text = text.strip()
@@ -376,6 +383,7 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             temperature=args.temperature,
             spks=spk,
             length_scale=args.speaking_rate,
+            use_external_speaker_embedding=args.use_external_speaker,
         )
         output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
         # RTF with HiFiGAN

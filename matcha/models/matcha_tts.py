@@ -51,6 +51,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
 
         if n_spks > 1:
             self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
+        # if self.use_external_speaker_embeddings:
+        #     self.ecapa_proj = torch.nn.Linear(192, 64)  # Проекция 192D → 128D
 
         self.encoder = TextEncoder(
             encoder.encoder_type,
@@ -73,7 +75,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.update_data_statistics(data_statistics)
 
     @torch.inference_mode()
-    def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, spks=None, length_scale=1.0):
+    def synthesise(self, x, x_lengths, n_timesteps, temperature=1.0, spks=None, length_scale=1.0,
+                   use_external_speaker_embedding=False):
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -110,8 +113,13 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # For RTF computation
         t = dt.datetime.now()
 
-        if self.n_spks > 1:
-            # Get speaker embedding
+        if use_external_speaker_embedding:
+            assert spks is not None, "External speaker embeddings must be provided"
+            assert spks.dim() == 2, "External speaker embeddings must be 2D tensors"
+            # ecapa_proj = torch.nn.Linear(192, 64)  # Проекция 192D → 128D
+            # spks = self.ecapa_proj(spks)  # 192 -> 64 projection
+        elif self.n_spks > 1:
+            # Get internal speaker embedding
             spks = self.spk_emb(spks.long())
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
@@ -149,7 +157,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             "rtf": rtf,
         }
 
-    def forward(self, x, x_lengths, y, y_lengths, spks=None, out_size=None, cond=None, durations=None):
+    def forward(self, x, x_lengths, y, y_lengths, spks=None, out_size=None, cond=None, durations=None,
+                use_external_speaker_embedding=False):  # where is it used????
         """
         Computes 3 losses:
             1. duration loss: loss between predicted token durations and those extracted by Monotinic Alignment Search (MAS).
@@ -170,8 +179,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             spks (torch.Tensor, optional): speaker ids.
                 shape: (batch_size,)
         """
-        if self.n_spks > 1:
-            # Get speaker embedding
+        if use_external_speaker_embedding:
+            assert spks is not None, "External speaker embeddings must be provided"
+            assert spks.dim() == 2, "External speaker embeddings must be 2D tensors"
+        elif self.n_spks > 1:
+            # Get internal speaker embedding
             spks = self.spk_emb(spks)
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
