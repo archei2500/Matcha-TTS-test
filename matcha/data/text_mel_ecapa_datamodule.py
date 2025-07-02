@@ -1,4 +1,4 @@
-from matcha.data.text_mel_datamodule import TextMelDataModule, TextMelDataset, parse_filelist
+from matcha.data.text_mel_datamodule import TextMelDataModule, TextMelDataset, parse_filelist, TextMelBatchCollate
 
 import random
 from pathlib import Path
@@ -90,48 +90,14 @@ class TextMelECAPADataset(TextMelDataset):
         return data
 
 
-# ОБНОВИТЬ ТОЖЕ
-class TextMelBatchCollate:
-    def __init__(self, n_spks):
-        self.n_spks = n_spks
-
+class TextMelECAPABatchCollate(TextMelBatchCollate):
     def __call__(self, batch):
-        B = len(batch)
-        y_max_length = max([item["y"].shape[-1] for item in batch])  # pylint: disable=consider-using-generator
-        y_max_length = fix_len_compatibility(y_max_length)
-        x_max_length = max([item["x"].shape[-1] for item in batch])  # pylint: disable=consider-using-generator
-        n_feats = batch[0]["y"].shape[-2]
+        # Фильтруем только нужные ключи для родителя
+        base_batch = [{k: v for k, v in item.items() if k not in ["ecapa"]} for item in batch]
+        batch_data = super().__call__(base_batch)
 
-        y = torch.zeros((B, n_feats, y_max_length), dtype=torch.float32)
-        x = torch.zeros((B, x_max_length), dtype=torch.long)
-        durations = torch.zeros((B, x_max_length), dtype=torch.long)
+        # Добавляем ECAPA
+        if "ecapa" in batch[0]:
+            batch_data["ecapa"] = torch.stack([item["ecapa"] for item in batch])
 
-        y_lengths, x_lengths = [], []
-        spks = []
-        filepaths, x_texts = [], []
-        for i, item in enumerate(batch):
-            y_, x_ = item["y"], item["x"]
-            y_lengths.append(y_.shape[-1])
-            x_lengths.append(x_.shape[-1])
-            y[i, :, : y_.shape[-1]] = y_
-            x[i, : x_.shape[-1]] = x_
-            spks.append(item["spk"])
-            filepaths.append(item["filepath"])
-            x_texts.append(item["x_text"])
-            if item["durations"] is not None:
-                durations[i, : item["durations"].shape[-1]] = item["durations"]
-
-        y_lengths = torch.tensor(y_lengths, dtype=torch.long)
-        x_lengths = torch.tensor(x_lengths, dtype=torch.long)
-        spks = torch.tensor(spks, dtype=torch.long) if self.n_spks > 1 else None
-
-        return {
-            "x": x,
-            "x_lengths": x_lengths,
-            "y": y,
-            "y_lengths": y_lengths,
-            "spks": spks,
-            "filepaths": filepaths,
-            "x_texts": x_texts,
-            "durations": durations if not torch.eq(durations, 0).all() else None,
-        }
+        return batch_data
