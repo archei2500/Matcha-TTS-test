@@ -56,7 +56,7 @@ class BaseLightningClass(LightningModule, ABC):
     def get_losses(self, batch):
         x, x_lengths = batch["x"], batch["x_lengths"]
         y, y_lengths = batch["y"], batch["y_lengths"]
-        spks = batch["spks"]
+        spks = batch["ecapa_emb"]
 
         dur_loss, prior_loss, diff_loss, *_ = self(
             x=x,
@@ -183,7 +183,7 @@ class BaseLightningClass(LightningModule, ABC):
             for i in range(2):
                 x = one_batch["x"][i].unsqueeze(0).to(self.device)
                 x_lengths = one_batch["x_lengths"][i].unsqueeze(0).to(self.device)
-                spks = one_batch["spks"][i].unsqueeze(0).to(self.device) if one_batch["spks"] is not None else None
+                spks = one_batch["ecapa_emb"][i].unsqueeze(0).to(self.device) if one_batch["ecapa_emb"] is not None else None
                 output = self.synthesise(x[:, :x_lengths], x_lengths, n_timesteps=10, spks=spks)
                 y_enc, y_dec = output["encoder_outputs"], output["decoder_outputs"]
                 attn = output["attn"]

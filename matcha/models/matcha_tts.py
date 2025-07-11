@@ -49,8 +49,10 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
 
-        if n_spks > 1:
-            self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
+        # if n_spks > 1:
+        #     self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
+        # if self.use_external_speaker_embeddings:
+        #     self.ecapa_proj = torch.nn.Linear(192, 64)  # Проекция 192D → 128D
 
         self.encoder = TextEncoder(
             encoder.encoder_type,
@@ -87,8 +89,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 shape: (batch_size,)
             n_timesteps (int): number of steps to use for reverse diffusion in decoder.
             temperature (float, optional): controls variance of terminal distribution.
-            spks (bool, optional): speaker ids.
-                shape: (batch_size,)
+            spks (torch.Tensor): speaker embedding.
+                shape: (batch_size, 192)
             length_scale (float, optional): controls speech pace.
                 Increase value to slow down generated speech and vice versa.
 
@@ -110,9 +112,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         # For RTF computation
         t = dt.datetime.now()
 
-        if self.n_spks > 1:
-            # Get speaker embedding
-            spks = self.spk_emb(spks.long())
+        assert spks is not None, "It is necessary to transfer speaker embedding"
+        assert spks.dim() == 2, "External speaker embeddings must be 2D tensors"
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
@@ -167,12 +168,11 @@ class MatchaTTS(BaseLightningClass):  # 🍵
                 shape: (batch_size,)
             out_size (int, optional): length (in mel's sampling rate) of segment to cut, on which decoder will be trained.
                 Should be divisible by 2^{num of UNet downsamplings}. Needed to increase batch size.
-            spks (torch.Tensor, optional): speaker ids.
-                shape: (batch_size,)
+            spks (torch.Tensor): speaker embedding.
+                shape: (batch_size, 192)
         """
-        if self.n_spks > 1:
-            # Get speaker embedding
-            spks = self.spk_emb(spks)
+        assert spks is not None, "It is necessary to transfer speaker embedding"
+        assert spks.dim() == 2, "External speaker embeddings must be 2D tensors"
 
         # Get encoder_outputs `mu_x` and log-scaled token durations `logw`
         mu_x, logw, x_mask = self.encoder(x, x_lengths, spks)
