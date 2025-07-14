@@ -13,6 +13,8 @@ from lightning.pytorch.utilities import grad_norm
 from matcha import utils
 from matcha.utils.utils import plot_tensor
 
+from matcha.services.vocoder_service import VocoderService
+
 log = utils.get_pylogger(__name__)
 
 
@@ -67,10 +69,35 @@ class BaseLightningClass(LightningModule, ABC):
             out_size=self.out_size,
             durations=batch["durations"],
         )
+
+        # Speaker Consistency Loss
+        synth_output = self.synthesise(
+            x,
+            x_lengths,
+            n_timesteps=10,
+            spks=spks
+        )
+        synth_mel = synth_output["mel"]  # Синтезированный мел
+
+        with torch.no_grad():
+            # Преобразуем мел в waveform с помощью vocoder_service
+            waveform = self.vocoder_service.vocoder_infer(synth_mel)
+
+            # Получаем ECAPA-эмбеддинг из сгенерированного waveform
+            # Важно: classifier.encode_batch ждёт (B, T) или (B, 1, T)
+            if waveform.dim() == 1:
+                waveform = waveform.unsqueeze(0)  # (1, T)
+            if waveform.dim() == 2:
+                waveform = waveform.unsqueeze(1)  # (B, 1, T) — mono channel
+            synth_ecapa = self.classifier.encode_batch(waveform).squeeze(1)  # (B, 192)
+
+        consistency_loss = torch.nn.functional.mse_loss(synth_ecapa, spks)
+
         return {
             "dur_loss": dur_loss,
             "prior_loss": prior_loss,
             "diff_loss": diff_loss,
+            "consistency_loss": consistency_loss,
         }
 
     def on_load_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
@@ -111,8 +138,22 @@ class BaseLightningClass(LightningModule, ABC):
             logger=True,
             sync_dist=True,
         )
+        self.log(
+            "sub_loss/train_consistency_loss",
+            loss_dict["consistency_loss"],
+            on_step=True,
+            on_epoch=True,
+            logger=True,
+            sync_dist=True,
+        )
 
         total_loss = sum(loss_dict.values())
+        # total_loss = (
+        #         loss_dict["dur_loss"]
+        #         + loss_dict["prior_loss"]
+        #         + loss_dict["diff_loss"]
+        #         + 0.1 * loss_dict["consistency_loss"]  # Подбирается экспериментально
+        # )
         self.log(
             "loss/train",
             total_loss,
@@ -146,6 +187,14 @@ class BaseLightningClass(LightningModule, ABC):
         self.log(
             "sub_loss/val_diff_loss",
             loss_dict["diff_loss"],
+            on_step=True,
+            on_epoch=True,
+            logger=True,
+            sync_dist=True,
+        )
+        self.log(
+            "sub_loss/val_consistency_loss",
+            loss_dict["consistency_loss"],
             on_step=True,
             on_epoch=True,
             logger=True,

@@ -36,6 +36,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         scheduler=None,
         prior_loss=True,
         use_precomputed_durations=False,
+        vocoder_service=None,
+        classifier=None,
     ):
         super().__init__()
 
@@ -48,6 +50,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.out_size = out_size
         self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
+        self.vocoder_service = vocoder_service
+        self.classifier = classifier
 
         # if n_spks > 1:
         #     self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
