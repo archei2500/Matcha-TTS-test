@@ -4,11 +4,12 @@ defaults:
 
 _target_: matcha.data.text_mel_datamodule.TextMelECAPADataModule
 name: libritts
-train_filelist_path: LibriTTS/train-clean-100/metadata.csv
-valid_filelist_path: LibriTTS/dev-clean/metadata.csv
+train_filelist_path: data/LibriTTS/train-clean-100/metadata.csv
+valid_filelist_path: data/LibriTTS/dev-clean/metadata.csv
 batch_size: 32
 add_blank: True
 n_spks: 247
+sample_rate: 24000
 data_statistics:  # Computed for libritts dataset
   mel_mean: -6.630575
   mel_std: 2.482914

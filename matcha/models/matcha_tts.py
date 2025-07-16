@@ -16,6 +16,8 @@ from matcha.utils.model import (
     generate_path,
     sequence_mask,
 )
+from matcha.services.vocoder_service import VocoderService
+from matcha.services.ecapa_service import ECAPAService
 
 log = utils.get_pylogger(__name__)
 
@@ -36,8 +38,6 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         scheduler=None,
         prior_loss=True,
         use_precomputed_durations=False,
-        vocoder_service=None,
-        classifier=None,
     ):
         super().__init__()
 
@@ -50,8 +50,9 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.out_size = out_size
         self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
-        self.vocoder_service = vocoder_service
-        self.classifier = classifier
+        self.vocoder_service = VocoderService('hifigan_univ_v1', 'https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000')
+        self.classifier = ECAPAService()
+        #self.classifier = classifier
 
         # if n_spks > 1:
         #     self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)

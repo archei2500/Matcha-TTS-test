@@ -85,11 +85,14 @@ class BaseLightningClass(LightningModule, ABC):
 
             # Получаем ECAPA-эмбеддинг из сгенерированного waveform
             # Важно: classifier.encode_batch ждёт (B, T) или (B, 1, T)
-            if waveform.dim() == 1:
-                waveform = waveform.unsqueeze(0)  # (1, T)
-            if waveform.dim() == 2:
-                waveform = waveform.unsqueeze(1)  # (B, 1, T) — mono channel
-            synth_ecapa = self.classifier.encode_batch(waveform).squeeze(1)  # (B, 192)
+            # if waveform.dim() == 1:
+            #     waveform = waveform.unsqueeze(0)  # (1, T)
+            # if waveform.dim() == 2:
+            #     waveform = waveform.unsqueeze(1)  # (B, 1, T) — mono channel
+            synth_ecapa = self.classifier.encode(waveform)
+            synth_ecapa = synth_ecapa.to(spks.device)
+            if synth_ecapa.dim() == 1:
+                synth_ecapa = synth_ecapa.unsqueeze(0)
 
         consistency_loss = torch.nn.functional.mse_loss(synth_ecapa, spks)
 
@@ -152,7 +155,7 @@ class BaseLightningClass(LightningModule, ABC):
         #         loss_dict["dur_loss"]
         #         + loss_dict["prior_loss"]
         #         + loss_dict["diff_loss"]
-        #         + 0.1 * loss_dict["consistency_loss"]  # Подбирается экспериментально
+        #         + 0.1 * loss_dict["consistency_loss"]  # Подбирается экспериментально - это для случая, если они несоразмерны
         # )
         self.log(
             "loss/train",

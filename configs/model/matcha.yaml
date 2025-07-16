@@ -14,11 +14,3 @@ data_statistics: ${data.data_statistics}
 out_size: null # Must be divisible by 4
 prior_loss: true
 use_precomputed_durations: ${data.load_durations}
-vocoder_service:
-  _target_: matcha.services.vocoder_service.VocoderService
-  vocoder_name: hifigan_univ_v1
-  checkpoint_path: https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000
-  device: cuda
-classifier:
-  _target_: matcha.services.ecapa_classifier.ECAPA_Classifier
-  # Параметры ECAPA...
