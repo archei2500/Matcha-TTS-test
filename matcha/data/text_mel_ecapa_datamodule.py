@@ -84,7 +84,7 @@ class TextMelECAPADataset(TextMelDataset):
     def get_datapoint(self, index):
         row = self.metadata.iloc[index]
         # base_data = super().get_datapoint([row["audio_path"], str(self.speaker_to_idx[row["speaker_id"]]), row["text"]])
-        base_data = super().get_datapoint([row["audio_path"], row["speaker_id"], row["text"]])
+        base_data = super().get_datapoint([row["audio_path"], int(row["speaker_id"]), row["text"]])
         base_data["ecapa_emb"] = torch.load(row["emb_path"])
 
         return base_data
