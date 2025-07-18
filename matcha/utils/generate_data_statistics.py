@@ -16,7 +16,8 @@ from hydra import compose, initialize
 from omegaconf import open_dict
 from tqdm.auto import tqdm
 
-from matcha.data.text_mel_datamodule import TextMelDataModule
+#from matcha.data.text_mel_datamodule import TextMelDataModule
+from matcha.data.text_mel_ecapa_datamodule import TextMelECAPADataModule
 from matcha.utils.logging_utils import pylogger
 
 log = pylogger.get_pylogger(__name__)
@@ -96,7 +97,8 @@ def main():
         cfg["valid_filelist_path"] = str(os.path.join(root_path, cfg["valid_filelist_path"]))
         cfg["load_durations"] = False
 
-    text_mel_datamodule = TextMelDataModule(**cfg)
+    #text_mel_datamodule = TextMelDataModule(**cfg)
+    text_mel_datamodule = TextMelECAPADataModule(**cfg)
     text_mel_datamodule.setup()
     data_loader = text_mel_datamodule.train_dataloader()
     log.info("Dataloader loaded! Now computing stats...")

@@ -75,8 +75,25 @@ class TextMelECAPADataModule(TextMelDataModule):
 
 
 class TextMelECAPADataset(TextMelDataset):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self,
+                 name,
+                 filelist_path,
+                 n_spks,
+                 cleaners,
+                 add_blank,
+                 n_fft,
+                 n_mels,
+                 sample_rate,
+                 hop_length,
+                 win_length,
+                 f_min,
+                 f_max,
+                 data_parameters,
+                 seed,
+                 load_durations,
+                 **kwargs):
+        super().__init__(name, filelist_path, n_spks, cleaners, add_blank, n_fft, n_mels, sample_rate, hop_length,
+                         win_length, f_min, f_max, data_parameters, seed, load_durations, **kwargs)
         self.metadata = pd.read_csv(self.hparams.filelist_path, sep="|", names=["utt_id", "text", "audio_path", "emb_path", "speaker_id"])
         # self.speaker_to_idx = {spk: idx for idx, spk in enumerate(self.metadata["speaker_id"].unique())}
         self.metadata = self.metadata.sample(frac=1).reset_index(drop=True)  # shuffle equivalent
