@@ -2,7 +2,7 @@ defaults:
   - ljspeech
   - _self_
 
-_target_: matcha.data.text_mel_datamodule.TextMelECAPADataModule
+_target_: matcha.data.text_mel_ecapa_datamodule.TextMelECAPADataModule
 name: libritts
 train_filelist_path: data/LibriTTS/train-clean-100/metadata.csv
 valid_filelist_path: data/LibriTTS/dev-clean/metadata.csv
