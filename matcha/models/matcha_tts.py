@@ -50,7 +50,8 @@ class MatchaTTS(BaseLightningClass):  # 🍵
         self.out_size = out_size
         self.prior_loss = prior_loss
         self.use_precomputed_durations = use_precomputed_durations
-        self.vocoder_service = VocoderService('hifigan_univ_v1', 'https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000')
+        # self.vocoder_service = VocoderService('hifigan_univ_v1', 'https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000')
+        self.vocoder_service = VocoderService('hifigan_univ_v1')
         self.classifier = ECAPAService()
         #self.classifier = classifier
 

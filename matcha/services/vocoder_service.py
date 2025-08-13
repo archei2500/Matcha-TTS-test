@@ -3,9 +3,15 @@ from matcha.hifigan.config import v1
 from matcha.hifigan.denoiser import Denoiser
 from matcha.hifigan.env import AttrDict
 from matcha.hifigan.models import Generator as HiFiGAN
+from matcha.utils.utils import assert_model_downloaded, get_user_data_dir
 
 
 class VocoderService:
+    VOCODER_URLS = {
+        "hifigan_T2_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/generator_v1",
+        "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",
+    }
+
     def __init__(self, vocoder_name, checkpoint_path, device=None):
         self.vocoder_name = vocoder_name
         self.checkpoint_path = checkpoint_path
@@ -13,6 +19,13 @@ class VocoderService:
         self._vocoder = None
         self._denoiser = None
         self._denoiser_strength = 0.00025
+
+        if checkpoint_path is None:
+            save_dir = get_user_data_dir()
+            self.checkpoint_path = save_dir / f"vocoder_{vocoder_name}"
+            assert_model_downloaded(self.checkpoint_path, self.VOCODER_URLS[vocoder_name])
+        else:
+            self.checkpoint_path = Path(checkpoint_path)
 
     @property
     def device(self):

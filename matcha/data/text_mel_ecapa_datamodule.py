@@ -121,6 +121,6 @@ class TextMelECAPABatchCollate(TextMelBatchCollate):
 
         # Добавляем ECAPA
         if "ecapa_emb" in batch[0]:
-            batch_data["ecapa_emb"] = torch.stack([item["ecapa_emb"] for item in batch])
+            batch_data["ecapa_emb"] = torch.stack([item["ecapa_emb"] for item in batch]).squeeze(1)
 
         return batch_data
