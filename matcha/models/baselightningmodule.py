@@ -82,13 +82,8 @@ class BaseLightningClass(LightningModule, ABC):
         with torch.no_grad():
             # Преобразуем мел в waveform с помощью vocoder_service
             waveform = self.vocoder_service.vocoder_infer(synth_mel)
-
-            # Получаем ECAPA-эмбеддинг из сгенерированного waveform
-            # Важно: classifier.encode_batch ждёт (B, T) или (B, 1, T)
-            # if waveform.dim() == 1:
-            #     waveform = waveform.unsqueeze(0)  # (1, T)
-            # if waveform.dim() == 2:
-            #     waveform = waveform.unsqueeze(1)  # (B, 1, T) — mono channel
+            if waveform.dim() == 1:
+                waveform = waveform.unsqueeze(0)
             synth_ecapa = self.classifier.encode(waveform)
             synth_ecapa = synth_ecapa.to(spks.device)
             if synth_ecapa.dim() == 1:

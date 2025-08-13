@@ -12,7 +12,7 @@ class VocoderService:
         "hifigan_univ_v1": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/g_02500000",
     }
 
-    def __init__(self, vocoder_name, checkpoint_path, device=None):
+    def __init__(self, vocoder_name, checkpoint_path=None, device=None):
         self.vocoder_name = vocoder_name
         self.checkpoint_path = checkpoint_path
         self._device = device

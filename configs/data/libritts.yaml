@@ -6,7 +6,7 @@ _target_: matcha.data.text_mel_ecapa_datamodule.TextMelECAPADataModule
 name: libritts
 train_filelist_path: data/LibriTTS/train-clean-100/metadata.csv
 valid_filelist_path: data/LibriTTS/dev-clean/metadata.csv
-batch_size: 32
+batch_size: 8
 add_blank: True
 n_spks: 247
 sample_rate: 24000

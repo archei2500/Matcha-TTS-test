@@ -1,6 +1,7 @@
 import torchaudio
 import torch
 from speechbrain.inference.speaker import EncoderClassifier
+from speechbrain.dataio.preprocess import AudioNormalizer
 
 
 class ECAPAService:
@@ -8,6 +9,8 @@ class ECAPAService:
         self.model_source = model_source
         self._device = device
         self._classifier = None
+        self.audio_norm = AudioNormalizer()
+        self.target_sample_rate = 16000
 
     @property
     def device(self):
@@ -36,26 +39,76 @@ class ECAPAService:
         )
         print("[ECAPAService] ECAPA model loaded.")
 
+    def _preprocess_waveform(self, waveform: torch.Tensor) -> torch.Tensor:
+        # Если waveform имеет размерность (T,) -> (1, 1, T)
+        if waveform.dim() == 1:
+            waveform = waveform.unsqueeze(0).unsqueeze(0)
+        # Если (B, T) -> (B, 1, T)
+        elif waveform.dim() == 2:
+            waveform = waveform.unsqueeze(1)
+
+        # Нормализация громкости
+        waveform = self.audio_norm(waveform, self.target_sample_rate)
+
+        # Обрезка/паддинг до ~3 секунд
+        target_length = 48000
+        if waveform.size(-1) > target_length:
+            waveform = waveform[..., :target_length]
+        else:
+            pad = target_length - waveform.size(-1)
+            waveform = torch.nn.functional.pad(waveform, (0, pad))
+
+        return waveform.to(self.device)
+
+    # def encode(self, waveform: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     Encode a waveform into an ECAPA speaker embedding.
+    #     waveform shape: (B, T), (B, 1, T), or (T,)
+    #     Returns: embedding tensor of shape (B, D) or (D,)
+    #     """
+    #     with torch.no_grad():
+    #         if waveform.dim() == 1:
+    #             waveform = waveform.unsqueeze(0).unsqueeze(0)  # (1, 1, T)
+    #         elif waveform.dim() == 2:
+    #             waveform = waveform.unsqueeze(1)  # (B, 1, T)
+    #         # Нормализация громкости
+    #         waveform = self.audio_norm(waveform, self.target_sample_rate)
+    #         waveform = waveform.to(self.device)
+    #         emb = self.classifier.encode_batch(waveform).squeeze(1)  # (B, D)
+    #         return emb.cpu()
+
     def encode(self, waveform: torch.Tensor) -> torch.Tensor:
         """
-        Encode a waveform into an ECAPA speaker embedding.
-        waveform shape: (B, T), (B, 1, T), or (T,)
-        Returns: embedding tensor of shape (B, D) or (D,)
+        Encode waveform to ECAPA embedding.
+        Args:
+            waveform: (B, T) or (T,)
+        Returns:
+            embedding: (B, D) or (D,)
         """
+        waveform = self._preprocess_waveform(waveform)
+
         with torch.no_grad():
-            if waveform.dim() == 1:
-                waveform = waveform.unsqueeze(0).unsqueeze(0)  # (1, 1, T)
-            elif waveform.dim() == 2:
-                waveform = waveform.unsqueeze(1)  # (B, 1, T)
-            # (B, 1, T)
-            waveform = waveform.to(self.device)
-            emb = self.classifier.encode_batch(waveform).squeeze(1)  # (B, D)
-            return emb.cpu()
+            # Получаем эмбеддинги для каждого элемента в батче
+            embeddings = []
+            for wav in waveform.unbind(0):  # Итерируем по батчу
+                emb = self.classifier.encode_batch(wav).squeeze()  # (D,)
+                embeddings.append(emb)
+
+            if len(embeddings) > 1:
+                return torch.stack(embeddings)  # (B, D)
+            return embeddings[0]  # (D,)
+
+    # def encode_file(self, filepath: str) -> torch.Tensor:
+    #     """
+    #     Load waveform from file and encode to ECAPA embedding.
+    #     Returns: embedding tensor of shape (1, D)
+    #     """
+    #     signal, fs = torchaudio.load(filepath)
+    #     return self.encode(signal.unsqueeze(0))  # (1, T)
 
     def encode_file(self, filepath: str) -> torch.Tensor:
-        """
-        Load waveform from file and encode to ECAPA embedding.
-        Returns: embedding tensor of shape (1, D)
-        """
+        """Load and encode audio file"""
         signal, fs = torchaudio.load(filepath)
-        return self.encode(signal.unsqueeze(0))  # (1, T)
+        if fs != self.target_sample_rate:
+            signal = torchaudio.functional.resample(signal, fs, self.target_sample_rate)
+        return self.encode(signal)
