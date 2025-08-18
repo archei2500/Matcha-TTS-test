@@ -79,17 +79,55 @@ class BaseLightningClass(LightningModule, ABC):
         )
         synth_mel = synth_output["mel"]  # Синтезированный мел
 
-        with torch.no_grad():
-            # Преобразуем мел в waveform с помощью vocoder_service
-            waveform = self.vocoder_service.vocoder_infer(synth_mel)
+        # MAX_FRAMES = 280
+        # T = synth_mel.size(-1)
+        # if T > MAX_FRAMES:
+        #     # случайный кроп — стабильная память + полезная регуляризация
+        #     start = torch.randint(0, T - MAX_FRAMES, (1,), device=synth_mel.device).item()
+        #     synth_mel = synth_mel[..., start:start + MAX_FRAMES]
+        #
+        # with torch.inference_mode():
+        #     # ВАЖНО: только короткий мел идёт в вокодер
+        #     waveform = self.vocoder_service.vocoder_infer(synth_mel, denoiser_strength=0.0)
+        #     if waveform.dim() == 1:
+        #         waveform = waveform.unsqueeze(0)
+        #
+        #     synth_ecapa = self.classifier.encode(waveform)  # вернёт (B, D)
+        #     synth_ecapa = synth_ecapa.to(spks.device, non_blocking=True)
+        #
+        # consistency_loss = torch.nn.functional.mse_loss(synth_ecapa, spks)
+
+        # ИЗМЕНЕНИЯ 18.08
+        MAX_FRAMES = 280
+        T = synth_mel.size(-1)
+        if T > MAX_FRAMES:
+            start = torch.randint(0, T - MAX_FRAMES, (1,), device=synth_mel.device).item()
+            synth_mel = synth_mel[..., start:start + MAX_FRAMES]
+
+        with torch.inference_mode():
+            waveform = self.vocoder_service.vocoder_infer(synth_mel, denoiser_strength=0.0)
             if waveform.dim() == 1:
                 waveform = waveform.unsqueeze(0)
-            synth_ecapa = self.classifier.encode(waveform)
-            synth_ecapa = synth_ecapa.to(spks.device)
+
+            synth_ecapa = self.classifier.encode(waveform)  # вернёт (B, D)
+            synth_ecapa = synth_ecapa.to(spks.device, non_blocking=True)
             if synth_ecapa.dim() == 1:
                 synth_ecapa = synth_ecapa.unsqueeze(0)
 
         consistency_loss = torch.nn.functional.mse_loss(synth_ecapa, spks)
+
+        # OLD
+        # with torch.no_grad():
+        #     # Преобразуем мел в waveform с помощью vocoder_service
+        #     waveform = self.vocoder_service.vocoder_infer(synth_mel)
+        #     if waveform.dim() == 1:
+        #         waveform = waveform.unsqueeze(0)
+        #     synth_ecapa = self.classifier.encode(waveform)
+        #     synth_ecapa = synth_ecapa.to(spks.device)
+        #     if synth_ecapa.dim() == 1:
+        #         synth_ecapa = synth_ecapa.unsqueeze(0)
+        #
+        # consistency_loss = torch.nn.functional.mse_loss(synth_ecapa, spks)
 
         return {
             "dur_loss": dur_loss,
