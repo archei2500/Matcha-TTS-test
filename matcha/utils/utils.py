@@ -135,10 +135,19 @@ def intersperse(lst, item):
     return result
 
 
+# def save_figure_to_numpy(fig):
+#     data = np.fromstring(fig.canvas..buffer_rgba(), dtype=np.uint8, sep="")
+#     data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+#     return data
+
+
 def save_figure_to_numpy(fig):
-    data = np.fromstring(fig.canvas..buffer_rgba(), dtype=np.uint8, sep="")
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    return data
+    fig.canvas.draw()
+    buf = fig.canvas.buffer_rgba()
+    data = np.frombuffer(buf, dtype=np.uint8)
+    width, height = fig.canvas.get_width_height()
+    data = data.reshape((height, width, 4))
+    return data[..., :3] # only rgb
 
 
 def plot_tensor(tensor):
