@@ -87,16 +87,24 @@ class ECAPAService:
         """
         waveform = self._preprocess_waveform(waveform)
 
-        with torch.no_grad():
-            # Получаем эмбеддинги для каждого элемента в батче
+        with torch.inference_mode():
             embeddings = []
-            for wav in waveform.unbind(0):  # Итерируем по батчу
-                emb = self.classifier.encode_batch(wav).squeeze()  # (D,)
+            for wav in waveform.unbind(0):
+                emb = self.classifier.encode_batch(wav).squeeze()
                 embeddings.append(emb)
+            return torch.stack(embeddings) if len(embeddings) > 1 else embeddings[0]
 
-            if len(embeddings) > 1:
-                return torch.stack(embeddings)  # (B, D)
-            return embeddings[0]  # (D,)
+        # OLD
+        # with torch.no_grad():
+        #     # Получаем эмбеддинги для каждого элемента в батче
+        #     embeddings = []
+        #     for wav in waveform.unbind(0):  # Итерируем по батчу
+        #         emb = self.classifier.encode_batch(wav).squeeze()  # (D,)
+        #         embeddings.append(emb)
+        #
+        #     if len(embeddings) > 1:
+        #         return torch.stack(embeddings)  # (B, D)
+        #     return embeddings[0]  # (D,)
 
     # def encode_file(self, filepath: str) -> torch.Tensor:
     #     """

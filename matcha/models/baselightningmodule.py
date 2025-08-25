@@ -79,24 +79,6 @@ class BaseLightningClass(LightningModule, ABC):
         )
         synth_mel = synth_output["mel"]  # Синтезированный мел
 
-        # MAX_FRAMES = 280
-        # T = synth_mel.size(-1)
-        # if T > MAX_FRAMES:
-        #     # случайный кроп — стабильная память + полезная регуляризация
-        #     start = torch.randint(0, T - MAX_FRAMES, (1,), device=synth_mel.device).item()
-        #     synth_mel = synth_mel[..., start:start + MAX_FRAMES]
-        #
-        # with torch.inference_mode():
-        #     # ВАЖНО: только короткий мел идёт в вокодер
-        #     waveform = self.vocoder_service.vocoder_infer(synth_mel, denoiser_strength=0.0)
-        #     if waveform.dim() == 1:
-        #         waveform = waveform.unsqueeze(0)
-        #
-        #     synth_ecapa = self.classifier.encode(waveform)  # вернёт (B, D)
-        #     synth_ecapa = synth_ecapa.to(spks.device, non_blocking=True)
-        #
-        # consistency_loss = torch.nn.functional.mse_loss(synth_ecapa, spks)
-
         # ИЗМЕНЕНИЯ 18.08
         MAX_FRAMES = 280
         T = synth_mel.size(-1)

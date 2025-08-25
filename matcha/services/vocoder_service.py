@@ -4,6 +4,7 @@ from matcha.hifigan.denoiser import Denoiser
 from matcha.hifigan.env import AttrDict
 from matcha.hifigan.models import Generator as HiFiGAN
 from matcha.utils.utils import assert_model_downloaded, get_user_data_dir
+from contextlib import nullcontext
 
 
 class VocoderService:
@@ -97,12 +98,27 @@ class VocoderService:
         if denoiser_strength is None:
             denoiser_strength = self._denoiser_strength
 
-        with torch.no_grad():
-            mel = mel.to(self.device)
-            audio = self.vocoder(mel).clamp(-1, 1)
-            if denoiser_strength > 0 and self.denoiser is not None:
-                audio = self.denoiser(audio.squeeze(), strength=denoiser_strength)
-            return audio.cpu().squeeze()
+        # new 25.08
+        use_denoiser = (denoiser_strength > 0.0)
+
+        amp_ctx = torch.cuda.amp.autocast(enabled=(self.device == 'cuda'))
+        with torch.inference_mode():
+            mel = mel.to(self.device, non_blocking=True)
+            with amp_ctx:
+                audio = self.vocoder(mel).clamp(-1, 1)
+
+            if use_denoiser and self.denoiser is not None:
+                audio = self.denoiser(audio.squeeze(1), strength=denoiser_strength)
+
+            return audio.detach().cpu().squeeze()
+
+        # OLD
+        # with torch.no_grad():
+        #     mel = mel.to(self.device)
+        #     audio = self.vocoder(mel).clamp(-1, 1)
+        #     if denoiser_strength > 0 and self.denoiser is not None:
+        #         audio = self.denoiser(audio.squeeze(), strength=denoiser_strength)
+        #     return audio.cpu().squeeze()
 
     def to(self, device: str):
         """Move all components to specified device."""
