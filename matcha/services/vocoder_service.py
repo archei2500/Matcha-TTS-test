@@ -101,11 +101,9 @@ class VocoderService:
         # new 25.08
         use_denoiser = (denoiser_strength > 0.0)
 
-        amp_ctx = torch.cuda.amp.autocast(enabled=(self.device == 'cuda'))
         with torch.inference_mode():
-            mel = mel.to(self.device, non_blocking=True)
-            with amp_ctx:
-                audio = self.vocoder(mel).clamp(-1, 1)
+            mel = mel.to(self.device)
+            audio = self.vocoder(mel).clamp(-1, 1)
 
             if use_denoiser and self.denoiser is not None:
                 audio = self.denoiser(audio.squeeze(1), strength=denoiser_strength)

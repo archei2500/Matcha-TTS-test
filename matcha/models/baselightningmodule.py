@@ -71,6 +71,9 @@ class BaseLightningClass(LightningModule, ABC):
         )
 
         # Speaker Consistency Loss
+        if x.size(1) > 200: # обрезка текста для экономии памяти
+            x = x[:, :200]
+            x_lengths = torch.clamp(x_lengths, max=200)
         synth_output = self.synthesise(
             x,
             x_lengths,

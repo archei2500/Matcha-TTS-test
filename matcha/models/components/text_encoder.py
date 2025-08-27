@@ -167,7 +167,10 @@ class RotaryPositionalEmbeddings(nn.Module):
         # $[-x^{(\frac{d}{2} + 1)}, -x^{(\frac{d}{2} + 2)}, ..., -x^{(d)}, x^{(1)}, x^{(2)}, ..., x^{(\frac{d}{2})}]$
         neg_half_x = self._neg_half(x_rope)
 
-        x_rope = (x_rope * self.cos_cached[: x.shape[0]]) + (neg_half_x * self.sin_cached[: x.shape[0]])
+        # x_rope = (x_rope * self.cos_cached[: x.shape[0]]) + (neg_half_x * self.sin_cached[: x.shape[0]])
+        cos = self.cos_cached[: x.shape[0]].clone()
+        sin = self.sin_cached[: x.shape[0]].clone()
+        x_rope = (x_rope * cos) + (neg_half_x * sin)
 
         return rearrange(torch.cat((x_rope, x_pass), dim=-1), "t b h d -> b h t d")
 
