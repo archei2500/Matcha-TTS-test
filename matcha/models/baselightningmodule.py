@@ -71,30 +71,29 @@ class BaseLightningClass(LightningModule, ABC):
         )
 
         # Speaker Consistency Loss
-        if x.size(1) > 200: # обрезка текста для экономии памяти
-            x = x[:, :200]
-            x_lengths = torch.clamp(x_lengths, max=200)
+        # if x.size(1) > 200: # crop (wrong)
+        #     x = x[:, :200]
+        #     x_lengths = torch.clamp(x_lengths, max=200)
         synth_output = self.synthesise(
             x,
             x_lengths,
             n_timesteps=10,
             spks=spks
         )
-        synth_mel = synth_output["mel"]  # Синтезированный мел
+        synth_mel = synth_output["mel"]  # synthesized mel
 
-        # ИЗМЕНЕНИЯ 18.08
-        MAX_FRAMES = 280
-        T = synth_mel.size(-1)
-        if T > MAX_FRAMES:
-            start = torch.randint(0, T - MAX_FRAMES, (1,), device=synth_mel.device).item()
-            synth_mel = synth_mel[..., start:start + MAX_FRAMES]
+        # MAX_FRAMES = 280
+        # T = synth_mel.size(-1)
+        # if T > MAX_FRAMES:
+        #     start = torch.randint(0, T - MAX_FRAMES, (1,), device=synth_mel.device).item()
+        #     synth_mel = synth_mel[..., start:start + MAX_FRAMES]
 
         with torch.inference_mode():
             waveform = self.vocoder_service.vocoder_infer(synth_mel, denoiser_strength=0.0)
             if waveform.dim() == 1:
                 waveform = waveform.unsqueeze(0)
 
-            synth_ecapa = self.classifier.encode(waveform)  # вернёт (B, D)
+            synth_ecapa = self.classifier.encode(waveform)  # (B, D)
             synth_ecapa = synth_ecapa.to(spks.device, non_blocking=True)
             if synth_ecapa.dim() == 1:
                 synth_ecapa = synth_ecapa.unsqueeze(0)

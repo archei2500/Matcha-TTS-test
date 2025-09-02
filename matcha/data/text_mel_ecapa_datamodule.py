@@ -18,6 +18,35 @@ from matcha.utils.utils import intersperse
 import pandas as pd
 
 
+def parse_metadata_filelist(filelist_path):
+    metadata = []
+    with open(filelist_path, encoding="utf-8") as f:
+        for line_num, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+
+            parts = line.split('|')
+
+            # Должно быть exactly 5 частей
+            if len(parts) != 5:
+                print(f"WARNING: Line {line_num} has {len(parts)} parts (expected 5): {line[:100]}...")
+                continue
+
+            utt_id, text, audio_path, emb_path, speaker_id = parts
+
+            # Проверяем, что speaker_id - число
+            try:
+                speaker_id = int(speaker_id)
+            except ValueError:
+                print(f"WARNING: Invalid speaker_id '{speaker_id}' on line {line_num}")
+                continue
+
+            metadata.append((utt_id, text, audio_path, emb_path, speaker_id))
+
+    return metadata
+
+
 class TextMelECAPADataModule(TextMelDataModule):
     def setup(self, stage: Optional[str] = None):  # pylint: disable=unused-argument
         self.trainset = TextMelECAPADataset(  # pylint: disable=attribute-defined-outside-init
@@ -93,14 +122,35 @@ class TextMelECAPADataset(TextMelDataset):
                  **kwargs):
         super().__init__(filelist_path, n_spks, cleaners, add_blank, n_fft, n_mels, sample_rate, hop_length,
                          win_length, f_min, f_max, data_parameters, seed, load_durations, **kwargs)
-        self.metadata = pd.read_csv(filelist_path, sep="|", names=["utt_id", "text", "audio_path", "emb_path", "speaker_id"])
+        # self.metadata = pd.read_csv(filelist_path, sep="|", names=["utt_id", "text", "audio_path", "emb_path", "speaker_id"])
+        metadata_list = parse_metadata_filelist(filelist_path)
+        self.metadata = pd.DataFrame(metadata_list,
+                                     columns=["utt_id", "text", "audio_path", "emb_path", "speaker_id"])
         # self.speaker_to_idx = {spk: idx for idx, spk in enumerate(self.metadata["speaker_id"].unique())}
-        self.metadata = self.metadata.sample(frac=1).reset_index(drop=True)  # shuffle equivalent
+        # self.metadata = self.metadata.sample(frac=1).reset_index(drop=True)  # shuffle equivalent
+        # self.filepaths_and_text = []
+        # for _, row in self.metadata.iterrows():
+        #     self.filepaths_and_text.append([row["audio_path"], int(row["speaker_id"]), row["text"]])
+        # random.seed(seed)
+        # random.shuffle(self.filepaths_and_text)
+        # Создаем синхронизированные индексы
+        indices = list(range(len(self.metadata)))
+        random.seed(seed)
+        random.shuffle(indices)
+
+        # Перемешиваем metadata в том же порядке
+        self.metadata = self.metadata.iloc[indices].reset_index(drop=True)
+
+        # Пересоздаем filepaths_and_text в том же порядке
+        self.filepaths_and_text = []
+        for _, row in self.metadata.iterrows():
+            self.filepaths_and_text.append([row["audio_path"], int(row["speaker_id"]), row["text"]])
 
     def get_datapoint(self, index):
-        row = self.metadata.iloc[index]
         # base_data = super().get_datapoint([row["audio_path"], str(self.speaker_to_idx[row["speaker_id"]]), row["text"]])
-        base_data = super().get_datapoint([row["audio_path"], int(row["speaker_id"]), row["text"]])
+        # base_data = super().get_datapoint([row["audio_path"], int(row["speaker_id"]), row["text"]])
+        base_data = super().get_datapoint(self.filepaths_and_text[index])
+        row = self.metadata.iloc[index]
         base_data["ecapa_emb"] = torch.load(row["emb_path"], map_location='cpu')
 
         return base_data
@@ -122,5 +172,16 @@ class TextMelECAPABatchCollate(TextMelBatchCollate):
         # Добавляем ECAPA
         if "ecapa_emb" in batch[0]:
             batch_data["ecapa_emb"] = torch.stack([item["ecapa_emb"] for item in batch]).squeeze(1)
+
+        # if torch.max(batch_data["x_lengths"]) > 2000:
+        #     print(
+        #         f"HAVE A BIG TEXT TENSOR AFTER BATCH COLLATE!! Max length: {torch.max(batch_data['x_lengths']).item()}")
+        #     print(f"All text lengths in batch: {batch_data['x_lengths'].tolist()}")
+        #
+        # # Также проверяем mel длины
+        # if torch.max(batch_data["y_lengths"]) > 3000:
+        #     print(
+        #         f"HAVE A BIG MEL TENSOR AFTER BATCH COLLATE!! Max length: {torch.max(batch_data['y_lengths']).item()}")
+        #     print(f"All mel lengths in batch: {batch_data['y_lengths'].tolist()}")
 
         return batch_data

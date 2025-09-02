@@ -218,6 +218,8 @@ class TextMelDataset(torch.utils.data.Dataset):
         if self.add_blank:
             text_norm = intersperse(text_norm, 0)
         text_norm = torch.IntTensor(text_norm)
+        if len(text_norm) > 1000:
+            print(f"WARNING: Very long text ({len(text_norm)} tokens): '{text[:100]}...'")
         return text_norm, cleaned_text
 
     def __getitem__(self, index):
@@ -238,6 +240,8 @@ class TextMelBatchCollate:
         y_max_length = fix_len_compatibility(y_max_length)
         x_max_length = max([item["x"].shape[-1] for item in batch])  # pylint: disable=consider-using-generator
         n_feats = batch[0]["y"].shape[-2]
+        if x_max_length > 2000:
+            print("X MAX LENGTH > 2000 in BASE BATCH COLLATE!")
 
         y = torch.zeros((B, n_feats, y_max_length), dtype=torch.float32)
         x = torch.zeros((B, x_max_length), dtype=torch.long)
