@@ -117,6 +117,26 @@ class ECAPAService:
     def encode_file(self, filepath: str) -> torch.Tensor:
         """Load and encode audio file"""
         signal, fs = torchaudio.load(filepath)
+
+        # 09.09
+        # Конвертируем стерео в моно
+        if signal.dim() == 2 and signal.size(0) == 2:
+            signal = signal.mean(dim=0, keepdim=True)  # [1, T]
+
         if fs != self.target_sample_rate:
             signal = torchaudio.functional.resample(signal, fs, self.target_sample_rate)
-        return self.encode(signal)
+        # return self.encode(signal)
+        emb = self.encode(signal)  # теперь всегда возвращает [B, 192]
+
+        # Для одного файла гарантируем [1, 192]
+        if emb.dim() == 1:
+            emb = emb.unsqueeze(0)
+
+        return emb
+
+        # # Конвертируем стерео в моно
+        # if signal.dim() == 2 and signal.size(0) == 2:
+        #     signal = signal.mean(dim=0, keepdim=True)  # [1, T]
+        #
+        # if fs != self.target_sample_rate:
+        #     signal = torchaudio.functional.resample(signal, fs, self.target_sample_rate)

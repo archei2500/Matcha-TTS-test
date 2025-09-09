@@ -8,14 +8,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
 import torch
-
-from matcha.hifigan.config import v1
-from matcha.hifigan.denoiser import Denoiser
-from matcha.hifigan.env import AttrDict
-from matcha.hifigan.models import Generator as HiFiGAN
+# import torchaudio
+#
+# from matcha.hifigan.config import v1
+# from matcha.hifigan.denoiser import Denoiser
+# from matcha.hifigan.env import AttrDict
+# from matcha.hifigan.models import Generator as HiFiGAN
 from matcha.models.matcha_tts import MatchaTTS
 from matcha.text import sequence_to_text, text_to_sequence
 from matcha.utils.utils import assert_model_downloaded, get_user_data_dir, intersperse
+
+from matcha.services.vocoder_service import VocoderService
+from matcha.services.ecapa_service import ECAPAService
 
 MATCHA_URLS = {
     "matcha_ljspeech": "https://github.com/shivammehta25/Matcha-TTS-checkpoints/releases/download/v1.0/matcha_ljspeech.ckpt",
@@ -81,28 +85,28 @@ def assert_required_models_available(args):
     return {"matcha": model_path, "vocoder": vocoder_path}
 
 
-def load_hifigan(checkpoint_path, device):
-    h = AttrDict(v1)
-    hifigan = HiFiGAN(h).to(device)
-    hifigan.load_state_dict(torch.load(checkpoint_path, map_location=device)["generator"])
-    _ = hifigan.eval()
-    hifigan.remove_weight_norm()
-    return hifigan
-
-
-def load_vocoder(vocoder_name, checkpoint_path, device):
-    print(f"[!] Loading {vocoder_name}!")
-    vocoder = None
-    if vocoder_name in ("hifigan_T2_v1", "hifigan_univ_v1"):
-        vocoder = load_hifigan(checkpoint_path, device)
-    else:
-        raise NotImplementedError(
-            f"Vocoder {vocoder_name} not implemented! define a load_<<vocoder_name>> method for it"
-        )
-
-    denoiser = Denoiser(vocoder, mode="zeros")
-    print(f"[+] {vocoder_name} loaded!")
-    return vocoder, denoiser
+# def load_hifigan(checkpoint_path, device):
+#     h = AttrDict(v1)
+#     hifigan = HiFiGAN(h).to(device)
+#     hifigan.load_state_dict(torch.load(checkpoint_path, map_location=device)["generator"])
+#     _ = hifigan.eval()
+#     hifigan.remove_weight_norm()
+#     return hifigan
+#
+#
+# def load_vocoder(vocoder_name, checkpoint_path, device):
+#     print(f"[!] Loading {vocoder_name}!")
+#     vocoder = None
+#     if vocoder_name in ("hifigan_T2_v1", "hifigan_univ_v1"):
+#         vocoder = load_hifigan(checkpoint_path, device)
+#     else:
+#         raise NotImplementedError(
+#             f"Vocoder {vocoder_name} not implemented! define a load_<<vocoder_name>> method for it"
+#         )
+#
+#     denoiser = Denoiser(vocoder, mode="zeros")
+#     print(f"[+] {vocoder_name} loaded!")
+#     return vocoder, denoiser
 
 
 def load_matcha(model_name, checkpoint_path, device):
@@ -114,12 +118,12 @@ def load_matcha(model_name, checkpoint_path, device):
     return model
 
 
-def to_waveform(mel, vocoder, denoiser=None, denoiser_strength=0.00025):
-    audio = vocoder(mel).clamp(-1, 1)
-    if denoiser is not None:
-        audio = denoiser(audio.squeeze(), strength=denoiser_strength).cpu().squeeze()
-
-    return audio.cpu().squeeze()
+# def to_waveform(mel, vocoder, denoiser, denoiser_strength=0.00025):
+#     audio = vocoder(mel).clamp(-1, 1)
+#     if denoiser is not None:
+#         audio = denoiser(audio.squeeze(), strength=denoiser_strength).cpu().squeeze()
+#
+#     return audio.cpu().squeeze()
 
 
 def save_to_folder(filename: str, output: dict, folder: str):
@@ -152,6 +156,8 @@ def validate_args(args):
             warnings.warn(warn_, UserWarning)
         if args.speaking_rate is None:
             args.speaking_rate = 1.0
+        assert args.aud is not None, "Audio prompt must be provided!"
+
 
     if args.batched:
         assert args.batch_size > 0, "Batch size must be greater than 0"
@@ -233,7 +239,9 @@ def cli():
     )
     parser.add_argument("--text", type=str, default=None, help="Text to synthesize")
     parser.add_argument("--file", type=str, default=None, help="Text file to synthesize")
-    parser.add_argument("--spk", type=int, default=None, help="Speaker ID")
+    # parser.add_argument("--spk", type=int, default=None, help="Speaker ID")
+    parser.add_argument("--aud", type=str, default=None,
+                        help="Audio file to make speaker embedding (path to audio prompt)")
     parser.add_argument(
         "--temperature",
         type=float,
@@ -278,15 +286,24 @@ def cli():
         args.model = "custom_model"
 
     model = load_matcha(args.model, paths["matcha"], device)
-    vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
+    # vocoder, denoiser = load_vocoder(args.vocoder, paths["vocoder"], device)
+    vocoder_service = VocoderService(vocoder_name=args.vocoder, device=device)
+    classifier = ECAPAService()
 
     texts = get_texts(args)
 
-    spk = torch.tensor([args.spk], device=device, dtype=torch.long) if args.spk is not None else None
+    # spk = torch.tensor([args.spk], device=device, dtype=torch.long) if args.spk is not None else None
+    emb = classifier.encode_file(args.aud)
+    print("TENSOR SHAPE: ", emb.shape)
+    if emb.dim() == 2 and emb.size(0) > 1:  # Если [2, 192]
+        emb = emb[0].unsqueeze(0)  # Берем первый элемент -> [1, 192]
+    if emb.dim() == 1:
+        synth_ecapa = emb.unsqueeze(0)
+    print("TENSOR SHAPE NOW: ", emb.shape)
     if len(texts) == 1 or not args.batched:
-        unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk)
+        unbatched_synthesis(args, device, model, vocoder_service, texts, emb)
     else:
-        batched_synthesis(args, device, model, vocoder, denoiser, texts, spk)
+        batched_synthesis(args, device, model, vocoder_service, texts, emb)
 
 
 class BatchedSynthesisDataset(torch.utils.data.Dataset):
@@ -313,7 +330,7 @@ def batched_collate_fn(batch):
     return {"x": x, "x_lengths": x_lengths}
 
 
-def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
+def batched_synthesis(args, device, model, vocoder_service, texts, spk):
     total_rtf = []
     total_rtf_w = []
     processed_text = [process_text(i, text, "cpu") for i, text in enumerate(texts)]
@@ -336,7 +353,10 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             length_scale=args.speaking_rate,
         )
 
-        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
+        # output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
+        output["waveform"] = vocoder_service.vocoder_infer(output["mel"], denoiser_strength=args.denoiser_strength)
+        if output["waveform"].dim() == 1:
+            output["waveform"] = output["waveform"].unsqueeze(0)
         t = (dt.datetime.now() - start_t).total_seconds()
         rtf_w = t * 22050 / (output["waveform"].shape[-1])
         print(f"[🍵-Batch: {i}] Matcha-TTS RTF: {output['rtf']:.4f}")
@@ -344,7 +364,8 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
         total_rtf.append(output["rtf"])
         total_rtf_w.append(rtf_w)
         for j in range(output["mel"].shape[0]):
-            base_name = f"utterance_{j:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{j:03d}"
+            # base_name = f"utterance_{j:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{j:03d}"
+            base_name = f"utterance_{j:03d}"
             length = output["mel_lengths"][j]
             new_dict = {"mel": output["mel"][j][:, :length], "waveform": output["waveform"][j][: length * 256]}
             location = save_to_folder(base_name, new_dict, args.output_folder)
@@ -356,12 +377,13 @@ def batched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
     print("[🍵] Enjoy the freshly whisked 🍵 Matcha-TTS!")
 
 
-def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
+def unbatched_synthesis(args, device, model, vocoder_service, texts, spk):
     total_rtf = []
     total_rtf_w = []
     for i, text in enumerate(texts):
         i = i + 1
-        base_name = f"utterance_{i:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{i:03d}"
+        # base_name = f"utterance_{i:03d}_speaker_{args.spk:03d}" if args.spk is not None else f"utterance_{i:03d}"
+        base_name = f"utterance_{i:03d}"
 
         print("".join(["="] * 100))
         text = text.strip()
@@ -377,7 +399,8 @@ def unbatched_synthesis(args, device, model, vocoder, denoiser, texts, spk):
             spks=spk,
             length_scale=args.speaking_rate,
         )
-        output["waveform"] = to_waveform(output["mel"], vocoder, denoiser, args.denoiser_strength)
+        #output["waveform"] = to_waveform(output["mel"], vocoder_service, args.denoiser_strength)
+        output["waveform"] = vocoder_service.vocoder_infer(output["mel"], denoiser_strength=args.denoiser_strength)
         # RTF with HiFiGAN
         t = (dt.datetime.now() - start_t).total_seconds()
         rtf_w = t * 22050 / (output["waveform"].shape[-1])
@@ -402,7 +425,8 @@ def print_config(args):
     print(f"\t- Temperature: {args.temperature}")
     print(f"\t- Speaking rate: {args.speaking_rate}")
     print(f"\t- Number of ODE steps: {args.steps}")
-    print(f"\t- Speaker: {args.spk}")
+    # print(f"\t- Speaker: {args.spk}")
+    print(f"\t- Speaker: {args.aud}")
 
 
 def get_device(args):

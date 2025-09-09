@@ -106,7 +106,7 @@ class VocoderService:
             audio = self.vocoder(mel).clamp(-1, 1)
 
             if use_denoiser and self.denoiser is not None:
-                audio = self.denoiser(audio.squeeze(1), strength=denoiser_strength)
+                audio = self.denoiser(audio.squeeze(1), strength=denoiser_strength).squeeze()
 
             return audio.detach().cpu().squeeze()
 
